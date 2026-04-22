@@ -1,4 +1,4 @@
-# Energy Consumption Prediction for Buildings
+# Energy Consumption Prediction
 
 A machine learning project for predicting building energy demand using geospatial data and multiple ML/DL model architectures. Includes CPU vs. GPU performance benchmarking across hardware accelerators.
 
