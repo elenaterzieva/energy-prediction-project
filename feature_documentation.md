@@ -12,7 +12,7 @@
 | Baseline | 4 | Basic physical dimensions |
 | Enhanced | 15 | Outlier handling, correlations, age, ratios, category |
 | Enhanced_2 | 18 | Construction type, external year, building shape |
-| Enhanced_3 | 32+ | Floor data, cooled volume, footprint, apartments, location encoding, history |
+| Enhanced_3 | 30+ | Floor data, cooled volume, footprint, apartments, location encoding, function type |
 
 ---
 
@@ -121,13 +121,6 @@ These features encode the average observed energy demand for each geographic gro
 |---|---|---|---|
 | `category_mean_energy` | `d_Category` + target | Mean target per building category on training data; global mean for unseen groups | Average energy demand for buildings of this use category. Captures systematic differences between residential, educational, commercial, etc. |
 
-### Historical Energy
-
-| Feature Name | Source Column | Computation | What It Represents |
-|---|---|---|---|
-| `hist_energy_2023` | `en2023_enegy_demand_present_m2` | Direct read, NaN filled with column median. Only added if ≥ 50 buildings have valid 2023 values. | Energy demand from the 2023 EPC in kWh/m2. Best single predictor when available — same building measured 2 years prior. |
-| `has_hist_energy` | derived from `en2023_enegy_demand_present_m2` | 1 if 2023 value is not null and > 0, else 0 | Binary flag indicating whether 2023 historical data exists. Allows model to learn different behaviour for buildings with/without history. |
-
 ### Function Type
 
 | Feature Name | Source Column | Computation | What It Represents |
@@ -157,6 +150,20 @@ These features encode the average observed energy demand for each geographic gro
 | TabPFN | Yes | Yes | Yes | — |
 | LightGBM (LGB) | — | — | — | Yes |
 | CatBoost (CB) | — | — | — | Yes |
+
+---
+
+## Excluded Columns (Data Leakage)
+
+The following columns from the raw dataset are **not used as features** because they are derived from or nearly identical to the target variable:
+
+| Column | Reason Excluded |
+|---|---|
+| `en2023_enegy_demand_present_m2` | Same measurement as target (energy demand per m2), just from the 2023 EPC. For buildings assessed in both years the values are nearly identical, making it a near-perfect proxy for the target and inflating R2 without generalising. |
+| `en2025_enegy_demand_after_m2` | Post-renovation demand — computed from the same EPC model that produces the target. |
+| `en2025_enegy_demand_present_y` | Total annual demand = target × area_heated. A direct algebraic transformation of the target. |
+| `en2023_enegy_demand_present_y` | Same issue as above for 2023. |
+| `en2025_class_present` | Energy class (A/B/C/D/E) is directly derived from the target value by the EPC methodology. |
 
 ---
 
