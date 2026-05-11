@@ -12,7 +12,7 @@
 | Baseline | 4 | Basic physical dimensions |
 | Enhanced | 15 | Outlier handling, correlations, age, ratios, category |
 | Enhanced_2 | 18 | Construction type, external year, building shape |
-| Enhanced_3 | 30+ | Floor data, cooled volume, footprint, apartments, location encoding, function type |
+| Enhanced_3 | ~35 | Floor data, cooled volume, footprint, apartments, leakage-free location/category target encoding, function type |
 
 ---
 
@@ -72,9 +72,9 @@ Includes all Enhanced features plus 3 new columns from the external GeoData laye
 
 ---
 
-## Enhanced_3 Features (32+ features)
+## Enhanced_3 Features (~35 features)
 
-Includes all Enhanced_2 features plus 14+ new engineered features from previously unused columns.
+Includes all Enhanced_2 features plus ~17 new engineered features from previously unused columns. Target-encoding features are computed using **training rows only** (leakage-free via `train_mask`) and applied as a lookup to the full dataset, including the held-out test set.
 
 ### Floor Geometry
 
@@ -107,19 +107,19 @@ Includes all Enhanced_2 features plus 14+ new engineered features from previousl
 
 ### Location Target Encoding
 
-These features encode the average observed energy demand for each geographic group, computed on training data and applied as a lookup to the full dataset.
+These features encode the average observed energy demand for each geographic group. Group means are computed **on training rows only** (controlled by `train_mask` passed to `_target_encode`), then applied as a lookup over the full dataset. Unseen groups receive the training-set global mean, preventing both data leakage and errors on rare locations.
 
 | Feature Name | Source Column | Computation | What It Represents |
 |---|---|---|---|
-| `mun_mean_energy` | `en2025_mun` + target | Mean target per municipality on training data; global mean for unseen groups | Average energy demand in the building's municipality. Captures climate zone and local construction norms. |
-| `oblast_mean_energy` | `en2025_oblast` + target | Mean target per oblast (province) on training data; global mean for unseen groups | Average energy demand in the building's province/oblast. Broader regional climate signal. |
-| `city_mean_energy` | `en2025_city` + target | Mean target per city on training data; global mean for unseen groups | Average energy demand in the building's city. Finer-grained than oblast; captures urban heat island, dense vs rural patterns. |
+| `mun_mean_energy` | `en2025_mun` + target | Mean target per municipality (training rows only); global training mean for unseen groups | Average energy demand in the building's municipality. Captures climate zone and local construction norms. |
+| `oblast_mean_energy` | `en2025_oblast` + target | Mean target per oblast/province (training rows only); global training mean for unseen groups | Average energy demand in the building's province/oblast. Broader regional climate signal. |
+| `city_mean_energy` | `en2025_city` + target | Mean target per city (training rows only); global training mean for unseen groups | Average energy demand in the building's city. Finer-grained than oblast; captures urban heat island, dense vs rural patterns. |
 
 ### Category Target Encoding
 
 | Feature Name | Source Column | Computation | What It Represents |
 |---|---|---|---|
-| `category_mean_energy` | `d_Category` + target | Mean target per building category on training data; global mean for unseen groups | Average energy demand for buildings of this use category. Captures systematic differences between residential, educational, commercial, etc. |
+| `category_mean_energy` | `d_Category` + target | Mean target per building category (training rows only); global training mean for unseen groups | Average energy demand for buildings of this use category. Captures systematic differences between residential, educational, commercial, etc. |
 
 ### Function Type
 
@@ -145,11 +145,12 @@ These features encode the average observed energy demand for each geographic gro
 | Random Forest (RF) | Yes | Yes | Yes | Yes |
 | XGBoost (XGB) | Yes | Yes | Yes | Yes |
 | MLP (Neural Net) | Yes | Yes | Yes | — |
-| LSTM | Yes | Yes | Yes | — |
-| TabNet | Yes | Yes | Yes | — |
-| TabPFN | Yes | Yes | Yes | — |
+| TabNet | Yes | Yes | Yes | Yes |
+| TabPFN | Yes | Yes | Yes | Yes |
 | LightGBM (LGB) | — | — | — | Yes |
 | CatBoost (CB) | — | — | — | Yes |
+
+> **LSTM removed**: LSTM performed poorly (R² 0.21–0.29) and was removed from the pipeline. It is not present in any source cell.
 
 ---
 
@@ -171,4 +172,4 @@ The following columns from the raw dataset are **not used as features** because 
 
 - **European decimal format**: Some numeric columns use commas as decimal separators (e.g., `1,5` instead of `1.5`). The `convert_european_numbers()` function handles this conversion.
 - **Target encoding**: Location and category features use leave-out mean encoding computed on training data only. Unseen groups (inference only) receive the global training mean to avoid data leakage.
-- **Categorical features**: Models that cannot handle strings natively (RF, XGB, MLP, LSTM, TabNet, TabPFN) receive one-hot encoded or label-encoded versions internally. LightGBM and CatBoost handle categorical columns natively.
+- **Categorical features**: Models that cannot handle strings natively (RF, XGB, MLP, TabNet, TabPFN) receive label-encoded versions internally. LightGBM and CatBoost handle categorical columns natively — CatBoost receives the raw category indices directly.
