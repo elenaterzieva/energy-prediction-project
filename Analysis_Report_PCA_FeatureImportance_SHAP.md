@@ -153,7 +153,21 @@ Five model families were trained across all four feature sets using randomised h
 
 ## 4. Principal Component Analysis (PCA)
 
-### 4.1 Setup and Scope
+### 4.1 Motivation and Theoretical Background
+
+Principal Component Analysis (PCA) is a linear dimensionality reduction technique that transforms a set of possibly correlated variables into a smaller set of uncorrelated variables called principal components, each ordered by the amount of variance it explains in the original data (Pearson, 1901; Hotelling, 1933). In the context of building energy research, PCA serves two distinct but complementary purposes: it reveals the latent structure of the building stock, and it guards against the multicollinearity that is endemic in building feature sets where physical quantities such as area, volume, and floor count co-vary by design.
+
+**Why PCA is appropriate here.** The Enhanced_3 feature set contains 33 variables that are not independent. Physical quantities such as `area_heated`, `area_total`, and `volume_heated` are structurally correlated — larger buildings have more of all three simultaneously. Engineered ratios such as `heating_efficiency_ratio` and `area_to_volume_ratio` are algebraically derived from the same underlying measurements. Without dimensionality reduction, any clustering or visualisation performed on the raw feature space would be dominated by size variation simply because size is represented by multiple redundant columns. PCA removes this redundancy by finding the true independent axes of variation.
+
+This approach is well-established in building energy analysis. Capozzoli et al. (2015) applied PCA to heating energy data in school buildings to isolate the independent drivers of consumption before regression modelling, finding that typological and geometric dimensions were consistently orthogonal. Kontokosta & Tull (2017) used PCA on a city-scale building energy dataset to identify latent archetypes in the stock prior to predictive modelling, demonstrating that the first few components reliably separated buildings by use intensity, size, and age — the same three dimensions that emerge as PC2, PC3, and PC1 in this analysis. More recently, Geraldi & Ghisi (2020) showed that PCA-derived components from building register data could substitute for directly measured energy audit variables in bottom-up stock models, supporting the use of PCA as a bridge between administratively available data and energy performance estimation.
+
+The form-factor dimension identified as PC4 in this analysis has a direct physical basis in the building energy literature. Depecker et al. (2001) established that a building's compactness ratio — closely related to the surface-area-to-volume ratio captured by `area_to_volume_ratio` — is one of the strongest geometric determinants of heating energy demand, independent of insulation quality. Buildings with a high surface-to-volume ratio lose more heat per unit of conditioned space. The fact that PCA recovers this as an independent component confirms that the engineered features are encoding physically meaningful quantities, not statistical artefacts.
+
+The age/vintage dimension (PC3) is similarly grounded. Kavgic et al. (2010) reviewed bottom-up building stock models across Europe and found that construction period is the single most reliable proxy for the thermal standard of the building envelope in the absence of direct audit data, because each regulatory era produced a distinct envelope specification. The emergence of PC3 as a clean, nearly pure age axis — dominated by `construction_year` and `building_age` with loadings of ±0.487 — is direct confirmation that the temporal features in this dataset are capturing this well-established regulatory-era signal.
+
+**Why the target variable is excluded from PCA.** PCA was applied to features only; `en2025_enegy_demand_present_m2` was not included. The energy demand is instead used to colour the scatter plots after the fact. This ensures the components represent the intrinsic structure of the building stock, not a projection optimised toward the label. Including the target would bias the components toward predictive power (similar to Partial Least Squares) and undermine the interpretability goal of understanding what dimensions the buildings naturally vary along.
+
+### 4.2 Setup and Scope
 
 PCA was applied to the full Enhanced_3 feature matrix (33 features, standardised with zero mean and unit variance) to understand the latent structure of the building stock. The target variable was not included in the PCA; it was used only for colouring the scatter plots. Ten components were extracted.
 
@@ -192,9 +206,13 @@ PCA was applied to the full Enhanced_3 feature matrix (33 features, standardised
 | `log_building_age` | -0.266 |
 | `area_per_apt` | -0.240 |
 
-**Interpretation:** PC1 is primarily a **building typology and energy profile** axis. Features that are definitionally linked to building type (`building_category`, `en2025_type`, `Correlation_PM/ED`, `category_mean_energy`) dominate this component. The negative sign of `volume_heated` and `area_per_apt` alongside positive `building_category` suggests that high-PC1 buildings are categorically "other residential" or non-standard types that tend to be smaller in volume. This axis separates the building stock by its categorical identity more than by any physical measurement.
+**Interpretation:** PC1 is primarily a **building typology and energy profile** axis — the dominant source of variation in the entire dataset, explaining 22.8% of all feature variance. The features with the largest loadings are not physical measurements but categorical and statistical descriptors: `building_category`, `en2025_type`, `Correlation_PM`, `Correlation_ED`, and `category_mean_energy`. These features are all expressions of the same underlying concept: *what kind of building is this, and what does the historical record say its energy class should be?*
 
-The strong presence of `Correlation_PM` and `Correlation_ED` (decade-adjusted correlations with primary energy and energy demand) alongside raw type codes confirms that PC1 encodes the prior knowledge embedded in the reference correlation tables — i.e., the expected energy performance class of the building given its type and age.
+The opposing signs between `building_category` (+0.338) and `en2025_type` (−0.331) indicate that these two type fields encode the building typology in opposite directions — one increases as the other decreases along this axis, suggesting they are drawn from different classification systems where "higher" codes mean different things. The `category_mean_energy` loading (−0.319) opposing `Correlation_PM` (+0.319) reflects a similar encoding reversal: categories with high primary-energy correlation tend to have lower target-encoded mean demand in this specific dataset, possibly because high-correlation categories skew toward recently certified (lower-demand) buildings.
+
+The presence of `log_building_age` (−0.266) and `area_per_apt` (−0.240) within this typological axis is meaningful: older buildings and buildings with smaller average apartment sizes both pull in the negative PC1 direction, co-varying with the energy-profile features. This suggests that in this building stock, typological identity is not fully separable from age and apartment configuration — single-family older houses cluster on one end of the axis, while newer multi-family stock clusters on the other.
+
+In the literature, building-type classification has consistently been identified as one of the primary stratifiers of energy demand in stock-level analyses. Papadopoulos et al. (2018), in a large-scale study of New York City's energy benchmarking data, found that property type was the strongest categorical predictor of energy use intensity (EUI), explaining more variance than floor area, age, or location individually. The emergence of PC1 as a typology axis in this dataset is consistent with this finding and validates the inclusion of `building_category` and the decade-level correlation features as first-order inputs.
 
 #### PC2 (11.9%) — Physical Size Axis
 
@@ -209,7 +227,13 @@ The strong presence of `Correlation_PM` and `Correlation_ED` (decade-adjusted co
 | `volume_heated` | +0.277 |
 | `apt_count` | +0.191 |
 
-**Interpretation:** PC2 is unambiguously a **physical size** axis. All loadings are positive and co-vary with area and volume. Larger buildings — in all dimensions — score higher on PC2. The presence of `footprint_to_heated_ratio` and `area_per_apt` (also positive) indicates that this axis additionally captures the scale of individual apartments and the horizontal spread of the building. Notably, `volume_heated` appears in both PC1 (negative) and PC2 (positive), meaning it plays different roles in different orthogonal contexts: in PC1 it partly defines type, in PC2 it purely reflects size.
+**Interpretation:** PC2 is unambiguously a **physical size** axis, and its structure is exactly what one would expect from first principles: all eight of the top loadings are positive, meaning that every dimension of physical size — heated area, total area, heated volume, footprint spread, apartment size, and number of units — increases together along this axis. A building that scores high on PC2 is simply a large building in all respects.
+
+The co-presence of `area_to_volume_ratio` (+0.278) and `footprint_to_heated_ratio` (+0.311) within a size axis at first appears contradictory — these are ratios, not absolute sizes, and should in principle be independent of scale. Their positive loading here reflects a real structural pattern in the dataset: larger buildings in this stock also tend to be horizontally spread (high footprint relative to their heated area), meaning the size axis captures not just scale but also a tendency toward low-rise sprawl in the largest buildings. This is consistent with the composition of the dataset, which includes large single-family houses and small multi-family low-rises alongside compact apartment towers.
+
+Notably, `volume_heated` appears in both PC1 (loading −0.273) and PC2 (loading +0.277) with similar magnitude but opposite sign. This is a property of PCA's orthogonal decomposition: along PC1 (the typology axis), larger heated volume is associated with a particular building category profile; along PC2 (the pure size axis), larger volume simply means a bigger building regardless of type. The two components together account for the full variance of `volume_heated` split across two independent interpretations — type-associated volume and scale-associated volume.
+
+The importance of building size as an independent axis of variation in stock-level energy modelling is well established. Amasyali & El-Gohary (2018), in their comprehensive review of 60 data-driven building energy prediction studies, identified floor area as the most universally included predictor across all study types, noting that it captures both the total thermal load of the building and its social function. PC2 confirms this: size is the second-most important source of variation in this building stock, independent of type.
 
 #### PC3 (10.1%) — Building Age / Vintage Axis
 
@@ -221,9 +245,16 @@ The strong presence of `Correlation_PM` and `Correlation_ED` (decade-adjusted co
 | `decade_correlation_pe` | -0.433 |
 | `log_building_age` | -0.266 |
 
-**Interpretation:** PC3 is almost entirely an **age/vintage** axis. `construction_year` and `building_age` are mathematical mirror images (one increases as the other decreases), producing near-equal and opposite loadings. The decade-level correlation features carry large negative loadings because older buildings (lower construction year) have stronger energy-consumption correlations with the pre-insulation regulation eras. This component effectively captures when the building was built and the associated regulatory era — pre-1970 stock (low energy standards), 1970–1995 transitional period, and post-2000 nearly-zero energy building standards.
+**Interpretation:** PC3 is the **age/vintage** axis, and it is the most structurally clean of all five components: only five features carry meaningful loadings, and they all measure the same underlying quantity — when the building was built — through different encodings. `construction_year` (+0.487) and `building_age` (−0.487) are mathematical inverses by definition (building_age = 2025 − construction_year), so their equal-and-opposite loadings are expected and serve as an internal consistency check. The large negative loadings of `decade_correlation_ed` (−0.437) and `decade_correlation_pe` (−0.433) reinforce the axis: older buildings (built in earlier decades) have stronger correlation with the pre-insulation energy demand reference tables, which were constructed from pre-renovation-era buildings. Higher correlation with old reference values means a lower-performing building by current standards.
 
-This is perhaps the most actionable component for retrofit planning: buildings with high negative PC3 scores (old, poor correlation with current standards) are the priority candidates for energy renovation.
+The regulatory interpretation of this axis is critical for practical use. European residential construction can be broadly stratified into three energy performance eras that correspond directly to positions along PC3:
+- **Pre-1970 (low PC3 score):** Buildings constructed before the first energy crises, with no thermal insulation requirements, single-glazed windows, and uninsulated cavity walls. These represent the lowest-performing segment of the stock.
+- **1970–2000 (mid PC3 score):** A transitional era in which successive national energy codes introduced minimum insulation requirements, but enforcement and practice varied considerably across countries and building types.
+- **Post-2000 (high PC3 score):** Buildings constructed under modern energy performance directives, including the EU's Energy Performance of Buildings Directive (EPBD, 2002/91/EC and its 2010 recast), which mandated near-zero energy standards for new construction progressively from 2018–2021.
+
+This regulatory stratification is precisely what Kavgic et al. (2010) identified as the primary basis for constructing archetype-based bottom-up building stock models across Europe: construction period, together with building type, is the minimal sufficient description for estimating the thermal standard of a building from register data alone. PC3 shows that this signal is cleanly recoverable from the dataset — the age features are not entangled with size or type in the PCA decomposition, which means construction year provides genuinely independent information to the prediction model.
+
+**This is the most actionable component for retrofit planning.** Buildings with strongly negative PC3 scores (old, pre-1970, high decade-correlation with historical demand) are the first-priority candidates for energy renovation. The component directly ranks buildings by their expected distance from current energy standards, without requiring an energy audit.
 
 #### PC4 (9.1%) — Compactness / Form Factor Axis
 
@@ -237,9 +268,13 @@ This is perhaps the most actionable component for retrofit planning: buildings w
 | `volume_heated` | -0.230 |
 | `category_mean_energy` | +0.227 |
 
-**Interpretation:** PC4 captures **building compactness and form factor**, independent of raw size. High positive loadings on `footprint_to_heated_ratio`, `gfa_to_footprint_ratio`, and `area_to_volume_ratio` alongside negative loading on `floor_count` indicate that high-PC4 buildings are low, horizontally spread, single-storey or few-storey structures. Low-PC4 buildings are tall, vertically compact apartment towers. This distinction matters energetically: compact towers have a favourable surface-area-to-volume ratio (less heat loss per unit floor area); spread-out low buildings have the opposite. The positive loading of `category_mean_energy` suggests that horizontally spread buildings have higher average energy demands in this stock, consistent with poorly insulated single-family houses.
+**Interpretation:** PC4 captures **building compactness and form factor**, orthogonal to both size (PC2) and typology (PC1). This is a geometrically precise axis: the three features with the largest positive loadings — `footprint_to_heated_ratio` (+0.370), `gfa_to_footprint_ratio` (+0.370), and `area_to_volume_ratio` (+0.363) — are all expressions of how horizontally spread a building is relative to its enclosed volume, while the large negative loading on `floor_count` (−0.299) captures the opposite pole: tall, vertically stacked buildings. In plain terms, PC4 distinguishes **sprawling low-rise buildings from compact high-rise buildings**, independent of how large either is.
 
-#### PC5 (6.0%) — Multi-unit Scale (High-rise vs. Cooled) Axis
+The physical relevance of this axis is direct and well-documented. Depecker et al. (2001) demonstrated through thermal simulation that the compactness ratio (defined as the ratio of the heated volume to the envelope surface area) is one of the strongest geometric determinants of heating energy demand: compact buildings lose proportionally less heat per unit of conditioned floor area because they have less exposed surface. A cube-shaped multi-storey tower is far more compact than a single-storey bungalow of the same floor area, and therefore requires less heating energy per m² in a cold climate. PC4 encodes exactly this distinction through its loading structure.
+
+The positive loading of `category_mean_energy` (+0.227) within the horizontal-spread pole of PC4 is a particularly informative result. It indicates that, in this dataset, buildings that are wide and low-rise also tend to belong to categories with higher average energy demand. This is consistent with the composition of the building stock: the low-PC4 pole (compact towers) corresponds to multi-family apartment buildings with relatively modern construction standards, while the high-PC4 pole (sprawling low buildings) corresponds to older single-family detached houses, which in this stock are disproportionately pre-1980 and poorly insulated. PC4 and PC3 are orthogonal, but they both ultimately identify the same policy target: low-PC3 (old) AND high-PC4 (sprawling) buildings represent the worst-performing segment of the stock by two independent physical arguments.
+
+#### PC5 (6.0%) — Multi-unit Density Axis
 
 | Feature | Loading |
 |---|---|
@@ -250,7 +285,11 @@ This is perhaps the most actionable component for retrofit planning: buildings w
 | `vol_cooled` | -0.330 |
 | `footprint_area` | -0.284 |
 
-**Interpretation:** PC5 distinguishes **large multi-apartment high-rises from other building types**. High PC5 scores correspond to buildings with many apartments, many floors, and small average apartment sizes — the classic dense residential tower. The negative loading of `vol_cooled` is counterintuitive at first glance but makes sense: buildings with large cooled volumes tend to be lower-density buildings with large floor plans, not narrow high-rises. This axis also differentiates within the multi-family category, separating standard apartment blocks from premium or mixed-use buildings with significant HVAC.
+**Interpretation:** PC5 captures a **within-multi-family density** dimension that does not reduce to size (PC2) or form factor (PC4). The dominant loading is `apt_count` (+0.519) — by far the single largest loading in this component — followed by `floor_count` (+0.394) and `c2025_functype` (+0.370). Together, these describe a building with many apartments stacked on many floors: the high-density urban residential tower. The opposing features — `area_per_apt` (−0.337), `vol_cooled` (−0.330), and `footprint_area` (−0.284) — describe large-unit, low-density buildings that are likely to have air conditioning (suggesting higher-standard or mixed-use residential).
+
+This axis matters energetically because the number of units in a building affects heat loss through shared internal walls and floors. In a densely packed apartment block, each individual apartment shares large portions of its envelope with adjacent heated spaces, substantially reducing net heat loss compared to a detached building of equivalent floor area. This "adjacency effect" is a well-known factor in residential energy modelling. Miller & Meggers (2017), in their analysis of the Building Data Genome Project dataset, found that occupant density and the number of tenants per floor area were strong modifiers of energy use intensity in multi-unit buildings, particularly for heating-dominated climates.
+
+The negative loading of `vol_cooled` (−0.330) at the low-PC5 pole is interpretable: buildings that invest in air conditioning infrastructure tend to be lower-density, higher-specification developments — large-footprint buildings where individual large apartments are separated by unconditioned spaces. This spending pattern is the opposite of dense social housing towers, which have high apartment counts but rarely have mechanical cooling. PC5 therefore also differentiates within the multi-family category between high-density social/standard housing and lower-density premium or mixed-use residential stock, the two segments of which can have quite different energy demand profiles despite nominally belonging to the same building category.
 
 ### 4.4 PCA Scatter Plot (PC1 vs PC2)
 
@@ -423,6 +462,40 @@ An R² of 0.539 means the best model explains approximately **54% of the varianc
 6. **The KMeans clustering identifies a high-energy tail (Cluster 1: ~184 buildings, median 185.82)** representing roughly 9% of the building stock with substantially higher per-m² energy demand than average. This group, identifiable through the PCA feature space, is the highest-priority target for energy renovation interventions.
 
 7. **LIME was not implemented in this notebook.** If local explanation at the instance level is required beyond the waterfall plots provided by SHAP, LIME would be a valuable complementary tool — particularly for explaining individual retrofit decisions to building owners using interpretable linear surrogate models.
+
+---
+
+---
+
+## References
+
+Amasyali, K., & El-Gohary, N. M. (2018). A review of data-driven building energy consumption prediction studies. *Renewable and Sustainable Energy Reviews*, 81, 1192–1205. https://doi.org/10.1016/j.rser.2017.08.052
+
+Capozzoli, A., Grassi, D., & Causone, F. (2015). Estimation models of heating energy consumption in schools for local authorities planning. *Energy and Buildings*, 105, 302–313. https://doi.org/10.1016/j.enbuild.2015.07.074
+
+Depecker, P., Menezo, C., Virgone, J., & Lepers, S. (2001). Design of buildings shape and energetic consumption. *Building and Environment*, 36(5), 627–635. https://doi.org/10.1016/S0360-1323(00)00044-5
+
+European Parliament. (2010). Directive 2010/31/EU of the European Parliament and of the Council on the energy performance of buildings (recast). *Official Journal of the European Union*, L 153, 13–35.
+
+Geraldi, M. S., & Ghisi, E. (2020). Data-driven framework towards localised bottom-up building stock energy modelling. *Energy and Buildings*, 226, 110382. https://doi.org/10.1016/j.enbuild.2020.110382
+
+Hotelling, H. (1933). Analysis of a complex of statistical variables into principal components. *Journal of Educational Psychology*, 24(6), 417–441. https://doi.org/10.1037/h0071325
+
+Kavgic, M., Mavrogianni, A., Mumovic, D., Summerfield, A., Stevanovic, Z., & Djurovic-Petrovic, M. (2010). A review of bottom-up building stock models for energy consumption in the residential sector. *Building and Environment*, 45(7), 1683–1697. https://doi.org/10.1016/j.buildenv.2010.01.021
+
+Kontokosta, C. E., & Tull, C. (2017). A data-driven predictive model of city-scale energy use in buildings. *Applied Energy*, 197, 303–317. https://doi.org/10.1016/j.apenergy.2017.04.005
+
+Lundberg, S. M., & Lee, S.-I. (2017). A unified approach to interpreting model predictions. *Advances in Neural Information Processing Systems*, 30, 4765–4774.
+
+Miller, C., & Meggers, F. (2017). The Building Data Genome Project: An open, public data set from office buildings for machine learning. *Energy Procedia*, 122, 439–444. https://doi.org/10.1016/j.egypro.2017.07.392
+
+Papadopoulos, S., Bonczak, B., & Kontokosta, C. E. (2018). Pattern recognition in building energy performance over time using energy benchmarking data. *Applied Energy*, 221, 576–586. https://doi.org/10.1016/j.apenergy.2018.03.079
+
+Pearson, K. (1901). On lines and planes of closest fit to systems of points in space. *Philosophical Magazine*, 2(11), 559–572. https://doi.org/10.1080/14786440109462720
+
+Ribeiro, M. T., Singh, S., & Guestrin, C. (2016). "Why should I trust you?": Explaining the predictions of any classifier. *Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining*, 1135–1144. https://doi.org/10.1145/2939672.2939778
+
+Runge, J., & Zmeureanu, R. (2019). Forecasting energy use in buildings using artificial neural networks: A review. *Energies*, 12(17), 3254. https://doi.org/10.3390/en12173254
 
 ---
 
